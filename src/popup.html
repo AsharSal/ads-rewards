@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Ad Rewards</title>
+  <link rel="stylesheet" href="styles/popup.css">
+</head>
+<body>
+  <div class="container">
+    <div id="login-section">
+      <h2>Ad Rewards</h2>
+      <button id="login-button" class="btn">Login with Google</button>
+    </div>
+    
+    <div id="main-section" class="hidden">
+      <div class="header">
+        <div class="user-section">
+          <h2>Welcome, <span id="user-name"></span></h2>
+          <button id="logout-button" class="btn">Logout</button>
+        </div>
+        <div class="balance">
+          <span>Balance:</span>
+          <span id="earnings">$0.00</span>
+        </div>
+      </div>
+      
+      <div class="ad-controls">
+        <button id="start-ads" class="btn">Start Watching Ads</button>
+        <div class="ad-settings">
+          <label>
+            <input type="checkbox" id="share-data">
+            Share browsing data for better targeting
+          </label>
+        </div>
+      </div>
+      
+      <div id="ad-container" class="hidden">
+        <!-- Ad content will be injected here -->
+      </div>
+    </div>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>
