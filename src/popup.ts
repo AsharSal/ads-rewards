@@ -1,4 +1,4 @@
-import { UserProfile, Message, AdSettings } from './types';
+import { UserProfile, Message, AdSettings, AdNetworkConfig } from './types';
 
 class PopupManager {
   private loginSection: HTMLElement = document.createElement('div');
@@ -10,6 +10,11 @@ class PopupManager {
   private earningsSpan: HTMLElement = document.createElement('span');
   private shareDataCheckbox: HTMLInputElement = document.createElement('input');
   private adContainer: HTMLElement = document.createElement('div');
+  private adNetworkForm: HTMLFormElement = document.createElement('form');
+  private networkSelect: HTMLSelectElement = document.createElement('select');
+  private publisherIdInput: HTMLInputElement = document.createElement('input');
+  private zoneIdInput: HTMLInputElement = document.createElement('input');
+  private adFormatSelect: HTMLSelectElement = document.createElement('select');
 
   constructor() {
     document.addEventListener('DOMContentLoaded', () => {
@@ -29,6 +34,11 @@ class PopupManager {
     this.earningsSpan = document.getElementById('earnings')!;
     this.shareDataCheckbox = document.getElementById('share-data') as HTMLInputElement;
     this.adContainer = document.getElementById('ad-container')!;
+    this.adNetworkForm = document.getElementById('ad-network-form') as HTMLFormElement;
+    this.networkSelect = document.getElementById('network-select') as HTMLSelectElement;
+    this.publisherIdInput = document.getElementById('publisher-id') as HTMLInputElement;
+    this.zoneIdInput = document.getElementById('zone-id') as HTMLInputElement;
+    this.adFormatSelect = document.getElementById('ad-format') as HTMLSelectElement;
   }
 
   private attachEventListeners() {
@@ -36,6 +46,7 @@ class PopupManager {
     this.logoutButton.addEventListener('click', () => this.handleLogout());
     this.startAdsButton.addEventListener('click', () => this.toggleAds());
     this.shareDataCheckbox.addEventListener('change', () => this.updateSettings());
+    this.adNetworkForm.addEventListener('submit', (e) => this.handleNetworkConfigSubmit(e));
 
     chrome.runtime.onMessage.addListener((message: Message) => {
       switch (message.type) {
@@ -52,8 +63,28 @@ class PopupManager {
     });
   }
 
+  private async handleNetworkConfigSubmit(e: Event) {
+    e.preventDefault();
+
+    const config: AdNetworkConfig = {
+      network: this.networkSelect.value as AdNetworkConfig['network'],
+      publisherId: this.publisherIdInput.value,
+      zoneId: this.zoneIdInput.value || undefined,
+      format: this.adFormatSelect.value as AdNetworkConfig['format']
+    };
+
+    // Send config to background script
+    chrome.runtime.sendMessage({
+      type: 'UPDATE_AD_NETWORK',
+      payload: config
+    });
+
+    // Clear form
+    this.adNetworkForm.reset();
+  }
+
   private async checkLoginState() {
-    const data = await chrome.storage.local.get(['user', 'settings']);
+    const data = await chrome.storage.local.get(['user', 'settings', 'adNetworkConfigs']);
     if (data.user) {
       this.handleLoginSuccess(data.user);
     }

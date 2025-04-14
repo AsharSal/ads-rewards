@@ -1,14 +1,16 @@
-import { UserProfile, AdSettings, Message, AdEngagement } from './types';
+import { UserProfile, AdSettings, Message, AdEngagement, AdNetworkConfig } from './types';
 
 class BackgroundService {
   private user: UserProfile | null = null;
   private settings: AdSettings = {
     shareData: false
   };
+  private adNetworkConfigs: AdNetworkConfig[] = [];
 
   constructor() {
     this.initializeListeners();
     this.loadUserData();
+    this.loadAdNetworkConfigs();
   }
 
   private async initializeListeners() {
@@ -16,7 +18,6 @@ class BackgroundService {
     chrome.runtime.onMessage.addListener((message: Message, sender, sendResponse) => {
       switch (message.type) {
         case 'LOGIN':
-          // Handle login asynchronously
           this.handleLogin().catch(error => {
             console.error('Background script: Login error:', error);
           });
@@ -30,8 +31,10 @@ class BackgroundService {
         case 'AD_COMPLETED':
           this.handleAdCompletion(message.payload);
           break;
+        case 'START_ADS':
+          this.startAdsWithNetwork(sender.tab?.id);
+          break;
       }
-      // Return true to indicate we're handling the message asynchronously
       return true;
     });
   }
@@ -77,11 +80,17 @@ class BackgroundService {
   private async handleAdCompletion(engagement: AdEngagement) {
     if (!this.user) return;
     
-    // Calculate rewards based on ad type and duration
-    const reward = engagement.type === 'video' ? 0.05 : 0.01;
-    this.user.balance += reward;
+    // Calculate rewards based on ad type, duration, and network
+    let reward = engagement.type === 'video' ? 0.05 : 0.01;
     
+    // Bonus for completed views
+    if (engagement.completed) {
+      reward *= 1.5;
+    }
+    
+    this.user.balance += reward;
     await this.saveUserData();
+    
     chrome.runtime.sendMessage({ 
       type: 'BALANCE_UPDATED', 
       payload: this.user.balance 
@@ -98,6 +107,43 @@ class BackgroundService {
     if (this.user) {
       await chrome.storage.local.set({ user: this.user });
     }
+  }
+
+  private async loadAdNetworkConfigs() {
+    const data = await chrome.storage.local.get('adNetworkConfigs');
+    if (data.adNetworkConfigs) {
+      this.adNetworkConfigs = data.adNetworkConfigs;
+    }
+  }
+
+  private async saveAdNetworkConfigs() {
+    await chrome.storage.local.set({ adNetworkConfigs: this.adNetworkConfigs });
+  }
+
+  private async startAdsWithNetwork(tabId?: number) {
+    if (!tabId || this.adNetworkConfigs.length === 0) return;
+
+    // Rotate through available networks
+    const network = this.adNetworkConfigs[Math.floor(Math.random() * this.adNetworkConfigs.length)];
+    
+    chrome.tabs.sendMessage(tabId, {
+      type: 'START_ADS',
+      payload: network
+    });
+  }
+
+  public async updateAdNetworkConfig(config: AdNetworkConfig) {
+    const existingIndex = this.adNetworkConfigs.findIndex(c => 
+      c.network === config.network && c.publisherId === config.publisherId
+    );
+
+    if (existingIndex >= 0) {
+      this.adNetworkConfigs[existingIndex] = config;
+    } else {
+      this.adNetworkConfigs.push(config);
+    }
+
+    await this.saveAdNetworkConfigs();
   }
 }
 

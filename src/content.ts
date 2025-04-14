@@ -1,9 +1,17 @@
-import { AdEngagement, Message } from './types';
+import { AdEngagement, Message, AdNetworkConfig } from './types';
 
 class AdManager {
   private active: boolean = false;
   private currentAd: AdEngagement | null = null;
   private adContainer: HTMLElement | null = null;
+  private adNetworkConfig: AdNetworkConfig | null = null;
+  private adScripts: { [key: string]: string } = {
+    adsterra: 'https://www.adsterra.com/script.js',
+    propellerads: 'https://propellerads.com/platform/script.js',
+    admaven: 'https://admaven.com/script.js',
+    hilltopads: 'https://hilltopads.com/script.js',
+    revenuehits: 'https://revenuehits.com/script.js'
+  };
 
   constructor() {
     this.setupMessageListener();
@@ -13,7 +21,8 @@ class AdManager {
     chrome.runtime.onMessage.addListener((message: Message) => {
       switch (message.type) {
         case 'START_ADS':
-          console.log("start ads message received");
+          console.log("start ads message received", message.payload);
+          this.adNetworkConfig = message.payload;
           this.startAdSession();
           break;
         case 'STOP_ADS':
@@ -42,17 +51,88 @@ class AdManager {
     return container;
   }
 
+  private async loadAdNetworkScript(network: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+      if (!this.adScripts[network]) {
+        reject(new Error(`No script URL defined for network: ${network}`));
+        return;
+      }
+
+      const script = document.createElement('script');
+      script.src = this.adScripts[network];
+      script.async = true;
+      script.onload = () => resolve();
+      script.onerror = () => reject(new Error(`Failed to load script for ${network}`));
+      document.head.appendChild(script);
+    });
+  }
+
+  private async initializeAdNetwork(config: AdNetworkConfig): Promise<void> {
+    if (!config || !config.network) return;
+
+    try {
+      await this.loadAdNetworkScript(config.network);
+      
+      // Initialize network-specific configuration
+      switch (config.network) {
+        case 'adsterra':
+          (window as any).adsterra = {
+            publisherId: config.publisherId,
+            zoneId: config.zoneId,
+            format: config.format || 'banner'
+          };
+          break;
+
+        case 'propellerads':
+          (window as any).propellerads = {
+            publisherId: config.publisherId,
+            placementId: config.placementId,
+            format: config.format
+          };
+          break;
+
+        case 'admaven':
+          (window as any).admaven = {
+            publisherId: config.publisherId,
+            zoneId: config.zoneId
+          };
+          break;
+
+        case 'hilltopads':
+          (window as any).hilltopads = {
+            publisherId: config.publisherId,
+            zoneId: config.zoneId
+          };
+          break;
+
+        case 'revenuehits':
+          (window as any).revenuehits = {
+            publisherId: config.publisherId,
+            format: config.format || 'banner'
+          };
+          break;
+      }
+    } catch (error) {
+      console.error(`Failed to initialize ad network: ${config.network}`, error);
+      throw error;
+    }
+  }
+
   private async startAdSession() {
-    if (this.active) return;
+    if (this.active || !this.adNetworkConfig) return;
     
     this.active = true;
     this.adContainer = this.createAdContainer();
     
-    // Start monitoring tab visibility
-    document.addEventListener('visibilitychange', this.handleVisibilityChange);
-    console.log("ad session started");
-    
-    await this.loadNextAd();
+    try {
+      await this.initializeAdNetwork(this.adNetworkConfig);
+      document.addEventListener('visibilitychange', this.handleVisibilityChange);
+      console.log("ad session started");
+      await this.loadNextAd();
+    } catch (error) {
+      console.error("Failed to start ad session:", error);
+      this.stopAdSession();
+    }
   }
 
   private stopAdSession() {
@@ -69,6 +149,14 @@ class AdManager {
       document.body.removeChild(this.adContainer);
       this.adContainer = null;
     }
+
+    // Clean up ad network scripts
+    if (this.adNetworkConfig) {
+      const scriptElement = document.querySelector(`script[src="${this.adScripts[this.adNetworkConfig.network]}"]`);
+      if (scriptElement) {
+        scriptElement.remove();
+      }
+    }
   }
 
   private handleVisibilityChange = () => {
@@ -78,56 +166,50 @@ class AdManager {
   }
 
   private async loadNextAd() {
-    if (!this.active || !this.adContainer) return;
+    if (!this.active || !this.adContainer || !this.adNetworkConfig) return;
 
-    // In a real implementation, this would integrate with ad networks
-    // For MVP, we'll simulate ad loading
-    const adType = Math.random() > 0.5 ? 'video' : 'banner';
-    console.log(`Loading ${adType} ad...`);
+    const adType = this.adNetworkConfig.format || 'banner';
+    console.log(`Loading ${adType} ad from ${this.adNetworkConfig.network}...`);
     
     this.currentAd = {
       adId: Math.random().toString(36).substring(7),
       startTime: Date.now(),
-      duration: adType === 'video' ? 30000 : 15000, // 30s for video, 15s for banner
+      duration: adType === 'video' ? 30000 : 15000,
       completed: false,
-      type: adType
+      type: adType === 'video' ? 'video' : 'banner'
     };
 
-    console.log(this.currentAd);
-
-    // Create ad content
-    const content = document.createElement('div');
-    content.style.cssText = 'padding: 20px; text-align: center;';
-    content.innerHTML = `
-      <div style="margin-bottom: 10px;">
-        ${adType === 'video' ? 'Video Ad' : 'Banner Ad'} Playing
-      </div>
-      <div class="timer">30</div>
-    `;
+    // Create container for ad content
+    const adFrame = document.createElement('div');
+    adFrame.id = `ad-frame-${this.currentAd.adId}`;
+    adFrame.style.cssText = 'width: 100%; height: 100%; border: none;';
     
     this.adContainer.innerHTML = '';
-    this.adContainer.appendChild(content);
+    this.adContainer.appendChild(adFrame);
 
-    // Start countdown
-    const timer = content.querySelector('.timer')!;
+    // Start monitoring ad engagement
+    this.monitorAdEngagement();
+  }
+
+  private monitorAdEngagement() {
+    if (!this.currentAd) return;
+
     const duration = this.currentAd.duration;
     const startTime = Date.now();
 
-    const updateTimer = () => {
+    const checkEngagement = () => {
       if (!this.active || !this.currentAd) return;
       
       const elapsed = Date.now() - startTime;
-      const remaining = Math.ceil((duration - elapsed) / 1000);
       
-      if (remaining <= 0) {
+      if (elapsed >= duration) {
         this.completeCurrentAd(true);
       } else {
-        timer.textContent = remaining.toString();
-        requestAnimationFrame(updateTimer);
+        requestAnimationFrame(checkEngagement);
       }
     };
 
-    requestAnimationFrame(updateTimer);
+    requestAnimationFrame(checkEngagement);
   }
 
   private completeCurrentAd(success: boolean) {

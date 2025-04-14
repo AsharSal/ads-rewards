@@ -23,6 +23,33 @@
         </div>
       </div>
       
+      <div class="ad-network-config">
+        <h3>Ad Network Settings</h3>
+        <form id="ad-network-form">
+          <select id="network-select" required>
+            <option value="">Select Network</option>
+            <option value="adsterra">Adsterra</option>
+            <option value="propellerads">PropellerAds</option>
+            <option value="admaven">AdMaven</option>
+            <option value="hilltopads">HilltopAds</option>
+            <option value="revenuehits">RevenueHits</option>
+          </select>
+          
+          <input type="text" id="publisher-id" placeholder="Publisher ID" required>
+          <input type="text" id="zone-id" placeholder="Zone ID (optional)">
+          
+          <select id="ad-format">
+            <option value="banner">Banner</option>
+            <option value="video">Video</option>
+            <option value="native">Native</option>
+            <option value="popup">Popup</option>
+            <option value="interstitial">Interstitial</option>
+          </select>
+          
+          <button type="submit" class="btn">Save Network Config</button>
+        </form>
+      </div>
+      
       <div class="ad-controls">
         <button id="start-ads" class="btn">Start Watching Ads</button>
         <div class="ad-settings">
