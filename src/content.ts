@@ -21,12 +21,10 @@ class AdManager {
     chrome.runtime.onMessage.addListener((message: Message) => {
       switch (message.type) {
         case 'START_ADS':
-          console.log("start ads message received", message.payload);
           this.adNetworkConfig = message.payload;
           this.startAdSession();
           break;
         case 'STOP_ADS':
-          console.log("stop ads message received");
           this.stopAdSession();
           break;
       }
@@ -127,7 +125,6 @@ class AdManager {
     try {
       await this.initializeAdNetwork(this.adNetworkConfig);
       document.addEventListener('visibilitychange', this.handleVisibilityChange);
-      console.log("ad session started");
       await this.loadNextAd();
     } catch (error) {
       console.error("Failed to start ad session:", error);
@@ -169,7 +166,6 @@ class AdManager {
     if (!this.active || !this.adContainer || !this.adNetworkConfig) return;
 
     const adType = this.adNetworkConfig.format || 'banner';
-    console.log(`Loading ${adType} ad from ${this.adNetworkConfig.network}...`);
     
     this.currentAd = {
       adId: Math.random().toString(36).substring(7),

@@ -34,6 +34,9 @@ class BackgroundService {
         case 'START_ADS':
           this.startAdsWithNetwork(sender.tab?.id);
           break;
+        case 'UPDATE_AD_NETWORK':
+          this.updateAdNetworkConfig(message.payload);
+          break;
       }
       return true;
     });
@@ -48,8 +51,6 @@ class BackgroundService {
         }
       });
       const data = await response.json();
-
-      console.log("data", data);
       
       this.user = {
         email: data.email,
@@ -68,7 +69,9 @@ class BackgroundService {
 
   private async handleLogout() {
     this.user = null;
+    this.adNetworkConfigs = [];
     await chrome.storage.local.remove(['user']);
+    await chrome.storage.local.remove(['adNetworkConfigs']);
     chrome.runtime.sendMessage({ type: 'LOGOUT_SUCCESS' });
   }
 
@@ -134,7 +137,7 @@ class BackgroundService {
 
   public async updateAdNetworkConfig(config: AdNetworkConfig) {
     const existingIndex = this.adNetworkConfigs.findIndex(c => 
-      c.network === config.network && c.publisherId === config.publisherId
+      c.network === config.network
     );
 
     if (existingIndex >= 0) {

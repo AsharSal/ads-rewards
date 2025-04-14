@@ -47,6 +47,7 @@ class PopupManager {
     this.startAdsButton.addEventListener('click', () => this.toggleAds());
     this.shareDataCheckbox.addEventListener('change', () => this.updateSettings());
     this.adNetworkForm.addEventListener('submit', (e) => this.handleNetworkConfigSubmit(e));
+    this.networkSelect.addEventListener('change', () => this.handleNetworkChange());
 
     chrome.runtime.onMessage.addListener((message: Message) => {
       switch (message.type) {
@@ -91,20 +92,32 @@ class PopupManager {
     if (data.settings) {
       this.shareDataCheckbox.checked = data.settings.shareData;
     }
+    if (data.adNetworkConfigs && data.adNetworkConfigs.length > 0) {
+      // Use the most recent config
+      const lastConfig = data.adNetworkConfigs[data.adNetworkConfigs.length - 1];
+      this.networkSelect.value = lastConfig.network;
+      this.publisherIdInput.value = lastConfig.publisherId;
+      this.zoneIdInput.value = lastConfig.zoneId || '';
+      this.adFormatSelect.value = lastConfig.format;
+    }
+  }
+
+  private clearAdNetworkForm() {
+    this.networkSelect.value = '';
+    this.publisherIdInput.value = '';
+    this.zoneIdInput.value = '';
+    this.adFormatSelect.value = 'banner';
   }
 
   private async handleLogin() {
     try {
       this.loginButton.disabled = true;
-      console.log("Attempting to send login message...");
       chrome.runtime.sendMessage({ type: 'LOGIN' }, (response) => {
-        console.log("Message send callback received", response);
         if (chrome.runtime.lastError) {
           console.error('Login error:', chrome.runtime.lastError);
           this.loginButton.disabled = false;
         }
       });
-      console.log("Message send call completed");
     } catch (error) {
       console.error('Login error:', error);
       this.loginButton.disabled = false;
@@ -122,10 +135,14 @@ class PopupManager {
     this.updateBalance(user.balance);
   }
 
-  private handleLogoutSuccess() {
+  private async handleLogoutSuccess() {
     this.loginSection.classList.remove('hidden');
     this.mainSection.classList.add('hidden');
     this.adContainer.classList.add('hidden');
+    this.clearAdNetworkForm();
+    this.shareDataCheckbox.checked = false;
+    // Clear ad network configs from storage
+    await chrome.storage.local.remove(['adNetworkConfigs']);
   }
 
   private updateBalance(balance: number) {
@@ -158,6 +175,30 @@ class PopupManager {
       this.startAdsButton.textContent = 'Stop Watching Ads';
       if (currentTab.id) {
         chrome.tabs.sendMessage(currentTab.id, { type: 'START_ADS' });
+      }
+    }
+  }
+
+  private async handleNetworkChange() {
+    const selectedNetwork = this.networkSelect.value;
+    const data = await chrome.storage.local.get(['adNetworkConfigs']);
+
+    // If we have configs and a network is selected, try to find matching config
+    if (data.adNetworkConfigs && selectedNetwork) {
+      const networkConfig = data.adNetworkConfigs.find(
+        (config: any) => config.network === selectedNetwork
+      );
+
+      if (networkConfig) {
+        this.publisherIdInput.value = networkConfig.publisherId;
+        this.zoneIdInput.value = networkConfig.zoneId || '';
+        this.adFormatSelect.value = networkConfig.format;
+      }
+      else {
+        // If no matching config, clear the inputs
+        this.publisherIdInput.value = '';
+        this.zoneIdInput.value = '';
+        this.adFormatSelect.value = 'banner';
       }
     }
   }
